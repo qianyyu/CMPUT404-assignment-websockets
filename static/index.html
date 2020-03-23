@@ -3,7 +3,7 @@
   <head> 
     <title>Websockets Assignment</title> 
     <meta charset="utf-8" /> 
-    <meta content='width=device-width; height=device-height; initial-scale=1.0; maximum-scale=1.0; user-scalable=0;' name='viewport' />
+    <meta content='width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0,, user-scalable=0' name='viewport' />
     <meta name="viewport" content="width=device-width" />
     <meta name="license" content="
         Copyright 2013 Google, Abram Hindle
@@ -46,16 +46,45 @@ world = {};
 
 //XXX: TODO Make this prettier!
 function drawCircle(context,entity) {
-    with(context) {
-        beginPath();                
-        lineWidth = 3;
-        var x = entity["x"];
-        var y = entity["y"];
-        //moveTo(x,y);
-        fillStyle = entity["colour"];
-        strokeStyle = fillStyle;
-        arc(x, y, (entity["radius"])?entity["radius"]:50, 0, 2.0 * Math.PI, false);  
-        stroke();                                
+    if(entity["radius"]!=null && entity["radius"] == 3){
+        with(context) {
+            beginPath();              
+            lineWidth = 3;
+            var x = entity["x"];
+            var y = entity["y"];
+            //moveTo(x,y);
+            fillStyle = entity["colour"];
+            strokeStyle = fillStyle;
+            arc(x, y, (entity["radius"])?entity["radius"]:50, 0, 2.0 * Math.PI, false); 
+            fill();
+                               
+        }
+    }
+    else{
+        // Reference:
+        // MDN, Drawing shapes with canvas
+        // https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Drawing_shapes
+        with(context){
+            var canvas = document.getElementById('canvas');
+            if (canvas.getContext) {
+                var ctx = canvas.getContext('2d');
+                beginPath();
+                lineWidth = 3;
+                var x = entity["x"];
+                var y = entity["y"];
+                y -= 20;
+                fillStyle = entity["colour"];
+                strokeStyle = fillStyle;
+                arc(x, y, 50, 0, Math.PI * 2, true); // Outer circle
+                moveTo(x+35, y);
+                arc(x, y, 35, 0, Math.PI, false);  // Mouth (clockwise)
+                moveTo(x-10, y-10);
+                arc(x-15, y-10, 5, 0, Math.PI * 2, true);  // Left eye
+                moveTo(x+20, y-10);
+                arc(x+15, y-10, 5, 0, Math.PI * 2, true);  // Right eye
+                stroke();
+            }
+        }
     }
 }
 
@@ -125,6 +154,12 @@ function addEntity(entity, data) {
     world[entity] = data;
     drawNextFrame(); // (but should we?)
     //XXX: Send a XHTML Request that updates the entity you just modified!
+    obj = {}
+    obj[entity] = data;
+    // obj format: {"X0":{"x":327,"y":310,"colour":"blue"}}
+    // alert(JSON.stringify(obj));
+    console.log(JSON.stringify(obj));
+    socket.send(JSON.stringify(obj));
 }
 var counter = 0;
 function addEntityWithoutName(data) {
@@ -228,19 +263,32 @@ mouse = (function() {
     return self;
 })();
 
+// Reference:
+// Random color generator by Anatoliy, 
+// https://stackoverflow.com/questions/1484506/random-color-generator
+function getRandomColor() {
+  var letters = '0123456789ABCDEF';
+  var color = '#';
+  for (var i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)];
+  }
+  return color;
+}
+
+
 // Add the application specific mouse listeners!
 //XXX: TODO Make these prettier!
 mouse.mousedowners.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'blue'});
+    addEntityWithoutName({'x':x,'y':y,'colour': '#43A2E4'});
 });
 
 mouse.mouseuppers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'red'});
+    addEntityWithoutName({'x':x,'y':y,'colour':'#FFC0CB'});
 });
 
 mouse.mousedraggers.push(function(x,y,clicked,e) {
-    addEntityWithoutName({'x':x,'y':y,'colour':'green',
-                          'radius':10});
+    addEntityWithoutName({'x':x,'y':y,'colour':getRandomColor(),
+                        'radius':3});
 });
 
 
@@ -249,11 +297,26 @@ function update() {
 }
 
 
-function wsSetup() {
-    var url = "ws://"+host+"/subscribe";   
+function wsSetup() { 
+    var url = "ws://"+host+"/subscribe";
+    console.log(url);
+    // alert(host)   
     socket = new WebSocket(url);
     socket.onopen = function() {
         //XXX: TODO What are you going to do here?
+        // alert('connected');
+        // https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch
+        fetch('/world').then(response =>{
+            return response.json();
+        }).then((data) => {
+            console.log(data);
+            world = {}
+            for(let i in data){
+                world[i] = data[i];
+            }
+            drawNext=true;
+        });
+
     };
     socket.onerror = function(msg) {
         debug("WebSocket Error:" + msg.data);
@@ -261,7 +324,13 @@ function wsSetup() {
     socket.onmessage = function(msg) {  
         try {
             debug("WebSocket Recv:" + msg.data);
-            //XXX: TODO What are you going to do here?            
+            //XXX: TODO What are you going to do here?
+            msg_recv = JSON.parse(msg.data);
+            for(let i in msg_recv){
+                world[i] = msg_recv[i];
+            }
+            drawNext=true;
+
         } catch (e) {
             alert("socket on message: " + e);
         }

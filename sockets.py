@@ -33,8 +33,6 @@ app.debug = True
 
 clients = list()
 
-# format example: 
-# entity: {'x': 'x':}
 class World:
     def __init__(self):
         self.space = dict()
@@ -106,14 +104,29 @@ def read_ws(ws,client):
         while True:
             msg = ws.receive()
             print("WS RECV: ",msg)
+            print(myWorld)
             if (msg is not None):
                 packet = json.loads(msg)
                 send_all_json( packet )
+                # packet example:
+                # obj format: {"entity":"X0","data":{"x":764,"y":290,"colour":"blue"}}
+                # entity format: 
+                # 'X2999'
+                # data format:
+                # {'x': 2999, 'y': 2999}
+                for entity in packet:
+                    data = packet[entity]
+                    myWorld.set(entity,data)
             else:
                 break
     except:
         '''Done'''
         
+'''
+packet = json.loads(msg)
+print("my debug",packet)
+
+'''
         
 @sockets.route('/subscribe')
 def subscribe_socket(ws):
@@ -129,11 +142,10 @@ def subscribe_socket(ws):
             msg = client.get()
             ws.send(msg)
     except Exception as e: # WebSocketError as e:
-        print("WS Error",e)
+        pass
     finally:
         clients.remove(client)
         gevent.kill(g)
-
 
 # I give this to you, this is how you get the raw body/data portion of a post in flask
 # this should come with flask but whatever, it's not my project.

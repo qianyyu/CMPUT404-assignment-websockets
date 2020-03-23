@@ -40,3 +40,4 @@ venv
 mytest.py
 .DS_Store
 .vscode/
+test
