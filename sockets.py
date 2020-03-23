@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-# Copyright (c) 2013-2014 Abram Hindle
+# Copyright (c) 2013-2014 Abram Hindle 2020 Qian Yu
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -13,8 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+# Reference:
+# Some code are modifed from 
+# https://github.com/abramhindle/WebSocketsExamples/blob/master/chat.py
+# Author: Abram Hindle
+# 
 import flask
-from flask import Flask, request
+from flask import Flask, request, jsonify, redirect 
 from flask_sockets import Sockets
 import gevent
 from gevent import queue
@@ -26,9 +31,13 @@ app = Flask(__name__)
 sockets = Sockets(app)
 app.debug = True
 
+clients = list()
+
+# format example: 
+# entity: {'x': 'x':}
 class World:
     def __init__(self):
-        self.clear()
+        self.space = dict()
         # we've got listeners now!
         self.listeners = list()
         
@@ -58,30 +67,72 @@ class World:
     
     def world(self):
         return self.space
+    
+class Client:
+    def __init__(self):
+        self.queue = queue.Queue()
+
+    def put(self, v):
+        self.queue.put_nowait(v)
+
+    def get(self):
+        return self.queue.get()
+    
+
+def send_all(msg):
+    for client in clients:
+        client.put( msg )
+
+def send_all_json(obj):
+    send_all( json.dumps(obj) )
+
 
 myWorld = World()        
 
 def set_listener( entity, data ):
     ''' do something with the update ! '''
-
-myWorld.add_set_listener( set_listener )
+    dic = {entity:data}
+    send_all_json(dic)
         
+myWorld.add_set_listener( set_listener )
 @app.route('/')
 def hello():
     '''Return something coherent here.. perhaps redirect to /static/index.html '''
-    return None
+    return redirect('/static/index.html')
 
 def read_ws(ws,client):
-    '''A greenlet function that reads from the websocket and updates the world'''
-    # XXX: TODO IMPLEMENT ME
-    return None
-
+    '''A greenlet function that reads from the websocket'''
+    try:
+        while True:
+            msg = ws.receive()
+            print("WS RECV: ",msg)
+            if (msg is not None):
+                packet = json.loads(msg)
+                send_all_json( packet )
+            else:
+                break
+    except:
+        '''Done'''
+        
+        
 @sockets.route('/subscribe')
 def subscribe_socket(ws):
-    '''Fufill the websocket URL of /subscribe, every update notify the
-       websocket and read updates from the websocket '''
-    # XXX: TODO IMPLEMENT ME
-    return None
+    # a queue
+    client = Client()
+    clients.append(client)
+    # gevent is a coroutine -based Python networking library that uses greenlet 
+    # to provide a high-level synchronous API on top of the libev or libuv event loop.
+    g = gevent.spawn( read_ws, ws, client )    
+    try:
+        while True:
+            # block here
+            msg = client.get()
+            ws.send(msg)
+    except Exception as e: # WebSocketError as e:
+        print("WS Error",e)
+    finally:
+        clients.remove(client)
+        gevent.kill(g)
 
 
 # I give this to you, this is how you get the raw body/data portion of a post in flask
@@ -99,24 +150,28 @@ def flask_post_json():
 @app.route("/entity/<entity>", methods=['POST','PUT'])
 def update(entity):
     '''update the entities via this interface'''
-    return None
+    json_file = flask_post_json()
+    for key in json_file:
+        myWorld.update(entity,key,json_file[key])
+    return jsonify(myWorld.get(entity))
+
 
 @app.route("/world", methods=['POST','GET'])    
 def world():
     '''you should probably return the world here'''
-    return None
+    return jsonify(myWorld.world())
 
 @app.route("/entity/<entity>")    
 def get_entity(entity):
     '''This is the GET version of the entity interface, return a representation of the entity'''
-    return None
+    return jsonify(myWorld.get(entity))
 
 
 @app.route("/clear", methods=['POST','GET'])
 def clear():
     '''Clear the world out!'''
-    return None
-
+    myWorld.clear()
+    return jsonify(myWorld.world())
 
 
 if __name__ == "__main__":

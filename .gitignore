@@ -35,3 +35,8 @@ nosetests.xml
 .project
 .pydevproject
 *~
+
+venv
+mytest.py
+.DS_Store
+.vscode/
